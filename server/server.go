@@ -457,6 +457,14 @@ func newServer(ctx context.Context, c Config, rotationStrategy rotationStrategy)
 		return nil, err
 	}
 	handleWithCORS("/.well-known/openid-configuration", discoveryHandler)
+
+	// OAuth 2.0 Authorization Server Metadata (RFC 8414)
+	oauthMetadataHandler, err := s.oauthMetadataHandler()
+	if err != nil {
+		return nil, err
+	}
+	handleWithCORS("/.well-known/oauth-authorization-server", oauthMetadataHandler)
+
 	// Handle the root path for the better user experience.
 	handleWithCORS("/", func(w http.ResponseWriter, r *http.Request) {
 		_, err := fmt.Fprintf(w, `<!DOCTYPE html>

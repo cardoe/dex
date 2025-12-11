@@ -90,6 +90,23 @@ type discovery struct {
 	Claims            []string `json:"claims_supported"`
 }
 
+// oauthMetadata represents the OAuth 2.0 Authorization Server Metadata
+// as defined by RFC 8414. This is a subset of the OpenID Connect discovery
+// metadata, containing only OAuth 2.0 specific fields.
+type oauthMetadata struct {
+	Issuer            string   `json:"issuer"`
+	Auth              string   `json:"authorization_endpoint"`
+	Token             string   `json:"token_endpoint"`
+	Keys              string   `json:"jwks_uri"`
+	DeviceEndpoint    string   `json:"device_authorization_endpoint,omitempty"`
+	Introspect        string   `json:"introspection_endpoint,omitempty"`
+	GrantTypes        []string `json:"grant_types_supported"`
+	ResponseTypes     []string `json:"response_types_supported"`
+	CodeChallengeAlgs []string `json:"code_challenge_methods_supported"`
+	Scopes            []string `json:"scopes_supported"`
+	AuthMethods       []string `json:"token_endpoint_auth_methods_supported"`
+}
+
 func (s *Server) discoveryHandler() (http.HandlerFunc, error) {
 	d := s.constructDiscovery()
 
@@ -132,6 +149,48 @@ func (s *Server) constructDiscovery() discovery {
 
 	d.GrantTypes = s.supportedGrantTypes
 	return d
+}
+
+// oauthMetadataHandler returns an HTTP handler for the OAuth 2.0 Authorization
+// Server Metadata endpoint as defined in RFC 8414.
+func (s *Server) oauthMetadataHandler() (http.HandlerFunc, error) {
+	m := s.constructOAuthMetadata()
+
+	data, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal oauth metadata: %v", err)
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		w.Write(data)
+	}), nil
+}
+
+// constructOAuthMetadata builds the OAuth 2.0 Authorization Server Metadata
+// response according to RFC 8414. This is similar to OpenID Connect discovery
+// but contains only OAuth 2.0 specific fields.
+func (s *Server) constructOAuthMetadata() oauthMetadata {
+	m := oauthMetadata{
+		Issuer:            s.issuerURL.String(),
+		Auth:              s.absURL("/auth"),
+		Token:             s.absURL("/token"),
+		Keys:              s.absURL("/keys"),
+		DeviceEndpoint:    s.absURL("/device/code"),
+		Introspect:        s.absURL("/token/introspect"),
+		CodeChallengeAlgs: []string{codeChallengeMethodS256, codeChallengeMethodPlain},
+		Scopes:            []string{"openid", "email", "groups", "profile", "offline_access"},
+		AuthMethods:       []string{"client_secret_basic", "client_secret_post"},
+	}
+
+	for responseType := range s.supportedResponseTypes {
+		m.ResponseTypes = append(m.ResponseTypes, responseType)
+	}
+	sort.Strings(m.ResponseTypes)
+
+	m.GrantTypes = s.supportedGrantTypes
+	return m
 }
 
 // handleAuthorization handles the OAuth2 auth endpoint.

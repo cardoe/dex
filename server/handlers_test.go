@@ -101,6 +101,53 @@ func TestHandleDiscovery(t *testing.T) {
 	}, res)
 }
 
+func TestHandleOAuthMetadata(t *testing.T) {
+	httpServer, server := newTestServer(t, nil)
+	defer httpServer.Close()
+
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest("GET", "/.well-known/oauth-authorization-server", nil))
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200 got %d", rr.Code)
+	}
+
+	var res oauthMetadata
+	err := json.NewDecoder(rr.Result().Body).Decode(&res)
+	require.NoError(t, err)
+	require.Equal(t, oauthMetadata{
+		Issuer:         httpServer.URL,
+		Auth:           fmt.Sprintf("%s/auth", httpServer.URL),
+		Token:          fmt.Sprintf("%s/token", httpServer.URL),
+		Keys:           fmt.Sprintf("%s/keys", httpServer.URL),
+		DeviceEndpoint: fmt.Sprintf("%s/device/code", httpServer.URL),
+		Introspect:     fmt.Sprintf("%s/token/introspect", httpServer.URL),
+		GrantTypes: []string{
+			"authorization_code",
+			"refresh_token",
+			"urn:ietf:params:oauth:grant-type:device_code",
+			"urn:ietf:params:oauth:grant-type:token-exchange",
+		},
+		ResponseTypes: []string{
+			"code",
+		},
+		CodeChallengeAlgs: []string{
+			"S256",
+			"plain",
+		},
+		Scopes: []string{
+			"openid",
+			"email",
+			"groups",
+			"profile",
+			"offline_access",
+		},
+		AuthMethods: []string{
+			"client_secret_basic",
+			"client_secret_post",
+		},
+	}, res)
+}
+
 func TestHandleHealthFailure(t *testing.T) {
 	httpServer, server := newTestServer(t, func(c *Config) {
 		c.HealthChecker = gosundheit.New()
