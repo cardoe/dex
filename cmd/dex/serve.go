@@ -733,27 +733,12 @@ func recordBuildInfo() {
 // it must match the filename or an error will be returned. Non-YAML files and subdirectories
 // are silently ignored. Returns nil if the directory doesn't exist (with a warning log).
 func loadClientsFromDir(dir string, logger *slog.Logger) ([]storage.Client, error) {
-	if dir == "" {
+	entries, err := validateConfigDir(dir, "clients", logger)
+	if err != nil {
+		return nil, err
+	}
+	if entries == nil {
 		return nil, nil
-	}
-
-	// Check if directory exists
-	info, err := os.Stat(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			logger.Warn("static clients directory does not exist", "dir", dir)
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to stat clients directory %s: %v", dir, err)
-	}
-	if !info.IsDir() {
-		return nil, fmt.Errorf("staticClientsDir is not a directory: %s", dir)
-	}
-
-	// Read directory contents
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read clients directory %s: %v", dir, err)
 	}
 
 	var clients []storage.Client
@@ -763,13 +748,11 @@ func loadClientsFromDir(dir string, logger *slog.Logger) ([]storage.Client, erro
 		}
 
 		filename := entry.Name()
-		// Only process .yaml and .yml files
-		if !strings.HasSuffix(filename, ".yaml") && !strings.HasSuffix(filename, ".yml") {
+		if !isYAMLFile(filename) {
 			continue
 		}
 
-		// Extract client ID from filename
-		clientID := strings.TrimSuffix(filename, filepath.Ext(filename))
+		clientID := extractIDFromFilename(filename)
 		if clientID == "" {
 			logger.Warn("skipping file with empty client ID", "file", filename)
 			continue
@@ -808,27 +791,12 @@ func loadClientsFromDir(dir string, logger *slog.Logger) ([]storage.Client, erro
 // it must match the filename or an error will be returned. Non-YAML files and subdirectories
 // are silently ignored. Returns nil if the directory doesn't exist (with a warning log).
 func loadConnectorsFromDir(dir string, logger *slog.Logger) ([]Connector, error) {
-	if dir == "" {
+	entries, err := validateConfigDir(dir, "connectors", logger)
+	if err != nil {
+		return nil, err
+	}
+	if entries == nil {
 		return nil, nil
-	}
-
-	// Check if directory exists
-	info, err := os.Stat(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			logger.Warn("static connectors directory does not exist", "dir", dir)
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to stat connectors directory %s: %v", dir, err)
-	}
-	if !info.IsDir() {
-		return nil, fmt.Errorf("staticConnectorsDir is not a directory: %s", dir)
-	}
-
-	// Read directory contents
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read connectors directory %s: %v", dir, err)
 	}
 
 	var connectors []Connector
@@ -838,13 +806,11 @@ func loadConnectorsFromDir(dir string, logger *slog.Logger) ([]Connector, error)
 		}
 
 		filename := entry.Name()
-		// Only process .yaml and .yml files
-		if !strings.HasSuffix(filename, ".yaml") && !strings.HasSuffix(filename, ".yml") {
+		if !isYAMLFile(filename) {
 			continue
 		}
 
-		// Extract connector ID from filename
-		connectorID := strings.TrimSuffix(filename, filepath.Ext(filename))
+		connectorID := extractIDFromFilename(filename)
 		if connectorID == "" {
 			logger.Warn("skipping file with empty connector ID", "file", filename)
 			continue
@@ -910,4 +876,42 @@ func validateNoDuplicateConnectorIDs(connectors []Connector) error {
 		seen[connector.ID] = true
 	}
 	return nil
+}
+
+// validateConfigDir checks if the directory exists and is valid for loading config files.
+// Returns the directory info and list of entries, or an error if the directory is invalid.
+// Logs a warning and returns nil if the directory doesn't exist.
+func validateConfigDir(dir, configType string, logger *slog.Logger) ([]os.DirEntry, error) {
+	if dir == "" {
+		return nil, nil
+	}
+
+	info, err := os.Stat(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			logger.Warn(fmt.Sprintf("static %s directory does not exist", configType), "dir", dir)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to stat %s directory %s: %v", configType, dir, err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("static%sDir is not a directory: %s", configType, dir)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s directory %s: %v", configType, dir, err)
+	}
+
+	return entries, nil
+}
+
+// isYAMLFile returns true if the filename has a .yaml or .yml extension.
+func isYAMLFile(filename string) bool {
+	return strings.HasSuffix(filename, ".yaml") || strings.HasSuffix(filename, ".yml")
+}
+
+// extractIDFromFilename extracts the ID from a YAML filename by removing the extension.
+func extractIDFromFilename(filename string) string {
+	return strings.TrimSuffix(filename, filepath.Ext(filename))
 }
