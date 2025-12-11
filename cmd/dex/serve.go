@@ -729,7 +729,9 @@ func recordBuildInfo() {
 
 // loadClientsFromDir reads client configuration files from the specified directory.
 // Each file should be named <client-id>.yaml or <client-id>.yml and contain a client configuration.
-// The client ID will be derived from the filename if not present in the file.
+// The client ID will be derived from the filename. If a client has an ID field in the file,
+// it must match the filename or an error will be returned. Non-YAML files and subdirectories
+// are silently ignored. Returns nil if the directory doesn't exist (with a warning log).
 func loadClientsFromDir(dir string, logger *slog.Logger) ([]storage.Client, error) {
 	if dir == "" {
 		return nil, nil
@@ -802,7 +804,9 @@ func loadClientsFromDir(dir string, logger *slog.Logger) ([]storage.Client, erro
 
 // loadConnectorsFromDir reads connector configuration files from the specified directory.
 // Each file should be named <connector-id>.yaml or <connector-id>.yml and contain a connector configuration.
-// The connector ID will be derived from the filename if not present in the file.
+// The connector ID will be derived from the filename. If a connector has an ID field in the file,
+// it must match the filename or an error will be returned. Non-YAML files and subdirectories
+// are silently ignored. Returns nil if the directory doesn't exist (with a warning log).
 func loadConnectorsFromDir(dir string, logger *slog.Logger) ([]Connector, error) {
 	if dir == "" {
 		return nil, nil
