@@ -299,3 +299,46 @@ func TestValidateNoDuplicateConnectorIDs(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+func TestIsYAMLFile(t *testing.T) {
+	tests := []struct {
+		filename string
+		expected bool
+	}{
+		{"client.yaml", true},
+		{"client.yml", true},
+		{"client.YAML", false},
+		{"client.txt", false},
+		{"README.md", false},
+		{".yaml", true},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			result := isYAMLFile(tt.filename)
+			require.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExtractIDFromFilename(t *testing.T) {
+	tests := []struct {
+		filename string
+		expected string
+	}{
+		{"client.yaml", "client"},
+		{"client.yml", "client"},
+		{"my-app", "my-app"},
+		{"app.config.yaml", "app.config"},
+		{".yaml", ""},
+		{"", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			result := extractIDFromFilename(tt.filename)
+			require.Equal(t, tt.expected, result)
+		})
+	}
+}
