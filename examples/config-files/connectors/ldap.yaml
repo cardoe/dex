@@ -1,0 +1,43 @@
+# Example LDAP connector configuration
+# The connector ID is derived from the filename: "ldap"
+# Do not include an "id" field unless it matches the filename
+
+type: "ldap"
+name: "LDAP"
+
+config:
+  # LDAP server connection
+  host: "ldap.example.com:636"
+
+  # Use TLS (recommended)
+  insecureNoSSL: false
+  insecureSkipVerify: false
+
+  # Optional: Path to CA certificate
+  # rootCA: /etc/dex/ldap-ca.crt
+
+  # Bind credentials
+  bindDN: "cn=admin,dc=example,dc=com"
+  bindPW: "admin-password"
+
+  # Optional: Use environment variable for password
+  # bindPWEnv: "LDAP_BIND_PASSWORD"
+
+  # User search configuration
+  userSearch:
+    baseDN: "ou=Users,dc=example,dc=com"
+    filter: "(objectClass=person)"
+    username: mail
+    idAttr: uid
+    emailAttr: mail
+    nameAttr: cn
+    preferredUsernameAttr: uid
+
+  # Group search configuration (optional)
+  groupSearch:
+    baseDN: "ou=Groups,dc=example,dc=com"
+    filter: "(objectClass=groupOfNames)"
+    userMatchers:
+      - userAttr: DN
+        groupAttr: member
+    nameAttr: cn

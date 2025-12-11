@@ -1,0 +1,28 @@
+# Example GitHub connector configuration
+# The connector ID is derived from the filename: "github"
+
+type: "github"
+name: "GitHub"
+
+config:
+  # GitHub OAuth application credentials
+  clientID: "your-github-client-id"
+  clientSecret: "your-github-client-secret"
+
+  # Optional: Use environment variables
+  # clientIDEnv: "GITHUB_CLIENT_ID"
+  # clientSecretEnv: "GITHUB_CLIENT_SECRET"
+
+  # Optional: Restrict to organization members
+  # orgs:
+  #   - name: your-org-name
+  #     teams:
+  #       - team-red
+  #       - team-blue
+
+  # Optional: Use GitHub Enterprise
+  # hostName: github.example.com
+  # rootCA: /etc/dex/github-ca.crt
+
+  # Optional: Redirect URI (defaults to dex's callback)
+  # redirectURI: "https://dex.example.com/callback"

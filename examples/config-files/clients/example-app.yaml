@@ -1,0 +1,27 @@
+# Example OAuth2 client configuration for a web application
+# The client ID is derived from the filename: "example-app"
+# Do not include an "id" field unless it matches the filename
+
+name: "Example Application"
+
+# Redirect URIs for OAuth2 callback
+redirectURIs:
+  - "http://127.0.0.1:5555/callback"
+  - "http://localhost:5555/callback"
+
+# Client secret for confidential clients
+# For public clients (like mobile/SPA apps), set public: true instead
+secret: "ZXhhbXBsZS1hcHAtc2VjcmV0"
+
+# Optional: Use environment variable for secret
+# secretEnv: "EXAMPLE_APP_SECRET"
+
+# Optional: Set to true for public clients (PKCE-enabled, no secret)
+# public: true
+
+# Optional: Display name and logo
+logoURL: "https://example.com/logo.png"
+
+# Optional: Trusted peers (for token exchange)
+# trustedPeers:
+#   - "another-client-id"
