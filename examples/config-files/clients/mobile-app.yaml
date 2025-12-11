@@ -1,0 +1,13 @@
+# Example OAuth2 public client configuration for a mobile application
+# Public clients do not have a secret and must use PKCE
+
+name: "Mobile App"
+
+redirectURIs:
+  - "com.example.app:/oauth2redirect"
+  - "http://127.0.0.1:8080/callback"
+
+# Mark as public client (no secret required)
+public: true
+
+logoURL: "https://example.com/mobile-logo.png"
