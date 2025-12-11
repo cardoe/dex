@@ -2,6 +2,8 @@ package main
 
 import (
 	"log/slog"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -25,5 +27,275 @@ func TestNewLogger(t *testing.T) {
 		require.Error(t, err)
 		require.Equal(t, "log format is not one of the supported values (json, text): gofmt", err.Error())
 		require.Equal(t, (*slog.Logger)(nil), logger)
+	})
+}
+
+func TestLoadClientsFromDir(t *testing.T) {
+	logger, err := newLogger(slog.LevelInfo, "text")
+	require.NoError(t, err)
+
+	t.Run("EmptyDir", func(t *testing.T) {
+		clients, err := loadClientsFromDir("", logger)
+		require.NoError(t, err)
+		require.Nil(t, clients)
+	})
+
+	t.Run("NonExistentDir", func(t *testing.T) {
+		clients, err := loadClientsFromDir("/nonexistent/path", logger)
+		require.NoError(t, err)
+		require.Nil(t, clients)
+	})
+
+	t.Run("ValidClientsDir", func(t *testing.T) {
+		// Create temporary directory
+		tmpDir := t.TempDir()
+
+		// Create test client files
+		client1 := `name: "Test Client 1"
+redirectURIs:
+  - "http://localhost:8080/callback"
+secret: "test-secret-1"`
+
+		client2 := `name: "Test Client 2"
+redirectURIs:
+  - "http://localhost:9090/callback"
+public: true`
+
+		err := os.WriteFile(filepath.Join(tmpDir, "client1.yaml"), []byte(client1), 0644)
+		require.NoError(t, err)
+
+		err = os.WriteFile(filepath.Join(tmpDir, "client2.yml"), []byte(client2), 0644)
+		require.NoError(t, err)
+
+		// Create a non-yaml file that should be ignored
+		err = os.WriteFile(filepath.Join(tmpDir, "README.txt"), []byte("ignore me"), 0644)
+		require.NoError(t, err)
+
+		// Load clients
+		clients, err := loadClientsFromDir(tmpDir, logger)
+		require.NoError(t, err)
+		require.Len(t, clients, 2)
+
+		// Verify client1
+		require.Equal(t, "client1", clients[0].ID)
+		require.Equal(t, "Test Client 1", clients[0].Name)
+		require.Equal(t, []string{"http://localhost:8080/callback"}, clients[0].RedirectURIs)
+		require.Equal(t, "test-secret-1", clients[0].Secret)
+
+		// Verify client2
+		require.Equal(t, "client2", clients[1].ID)
+		require.Equal(t, "Test Client 2", clients[1].Name)
+		require.Equal(t, []string{"http://localhost:9090/callback"}, clients[1].RedirectURIs)
+		require.True(t, clients[1].Public)
+	})
+
+	t.Run("ClientIDMismatch", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create client with mismatched ID
+		clientWithID := `id: "different-id"
+name: "Test Client"
+redirectURIs:
+  - "http://localhost:8080/callback"
+secret: "test-secret"`
+
+		err := os.WriteFile(filepath.Join(tmpDir, "client1.yaml"), []byte(clientWithID), 0644)
+		require.NoError(t, err)
+
+		// This should fail because the ID in the file doesn't match the filename
+		clients, err := loadClientsFromDir(tmpDir, logger)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "client ID mismatch")
+		require.Nil(t, clients)
+	})
+
+	t.Run("InvalidYAML", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create invalid YAML file
+		err := os.WriteFile(filepath.Join(tmpDir, "invalid.yaml"), []byte("invalid: [yaml"), 0644)
+		require.NoError(t, err)
+
+		clients, err := loadClientsFromDir(tmpDir, logger)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to parse")
+		require.Nil(t, clients)
+	})
+
+	t.Run("NotADirectory", func(t *testing.T) {
+		tmpFile := filepath.Join(t.TempDir(), "notadir")
+		err := os.WriteFile(tmpFile, []byte("test"), 0644)
+		require.NoError(t, err)
+
+		clients, err := loadClientsFromDir(tmpFile, logger)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "not a directory")
+		require.Nil(t, clients)
+	})
+}
+
+func TestLoadConnectorsFromDir(t *testing.T) {
+	logger, err := newLogger(slog.LevelInfo, "text")
+	require.NoError(t, err)
+
+	t.Run("EmptyDir", func(t *testing.T) {
+		connectors, err := loadConnectorsFromDir("", logger)
+		require.NoError(t, err)
+		require.Nil(t, connectors)
+	})
+
+	t.Run("NonExistentDir", func(t *testing.T) {
+		connectors, err := loadConnectorsFromDir("/nonexistent/path", logger)
+		require.NoError(t, err)
+		require.Nil(t, connectors)
+	})
+
+	t.Run("ValidConnectorsDir", func(t *testing.T) {
+		// Create temporary directory
+		tmpDir := t.TempDir()
+
+		// Create test connector files
+		connector1 := `type: "mockCallback"
+name: "Test Connector 1"
+config:
+  issuer: "https://example.com"`
+
+		connector2 := `type: "mockCallback"
+name: "Test Connector 2"
+config:
+  issuer: "https://example2.com"`
+
+		err := os.WriteFile(filepath.Join(tmpDir, "connector1.yaml"), []byte(connector1), 0644)
+		require.NoError(t, err)
+
+		err = os.WriteFile(filepath.Join(tmpDir, "connector2.yml"), []byte(connector2), 0644)
+		require.NoError(t, err)
+
+		// Create a non-yaml file that should be ignored
+		err = os.WriteFile(filepath.Join(tmpDir, "README.txt"), []byte("ignore me"), 0644)
+		require.NoError(t, err)
+
+		// Load connectors
+		connectors, err := loadConnectorsFromDir(tmpDir, logger)
+		require.NoError(t, err)
+		require.Len(t, connectors, 2)
+
+		// Verify connector1
+		require.Equal(t, "connector1", connectors[0].ID)
+		require.Equal(t, "Test Connector 1", connectors[0].Name)
+		require.Equal(t, "mockCallback", connectors[0].Type)
+
+		// Verify connector2
+		require.Equal(t, "connector2", connectors[1].ID)
+		require.Equal(t, "Test Connector 2", connectors[1].Name)
+		require.Equal(t, "mockCallback", connectors[1].Type)
+	})
+
+	t.Run("ConnectorIDMismatch", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create connector with mismatched ID
+		connectorWithID := `id: "different-id"
+type: "mockCallback"
+name: "Test Connector"
+config:
+  issuer: "https://example.com"`
+
+		err := os.WriteFile(filepath.Join(tmpDir, "connector1.yaml"), []byte(connectorWithID), 0644)
+		require.NoError(t, err)
+
+		// This should fail because the ID in the file doesn't match the filename
+		connectors, err := loadConnectorsFromDir(tmpDir, logger)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "connector ID mismatch")
+		require.Nil(t, connectors)
+	})
+
+	t.Run("InvalidYAML", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create invalid YAML file
+		err := os.WriteFile(filepath.Join(tmpDir, "invalid.yaml"), []byte("invalid: [yaml"), 0644)
+		require.NoError(t, err)
+
+		connectors, err := loadConnectorsFromDir(tmpDir, logger)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to parse")
+		require.Nil(t, connectors)
+	})
+
+	t.Run("NotADirectory", func(t *testing.T) {
+		tmpFile := filepath.Join(t.TempDir(), "notadir")
+		err := os.WriteFile(tmpFile, []byte("test"), 0644)
+		require.NoError(t, err)
+
+		connectors, err := loadConnectorsFromDir(tmpFile, logger)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "not a directory")
+		require.Nil(t, connectors)
+	})
+}
+
+func TestValidateNoDuplicateClientIDs(t *testing.T) {
+	t.Run("NoDuplicates", func(t *testing.T) {
+		clients := []storage.Client{
+			{ID: "client1", Name: "Client 1"},
+			{ID: "client2", Name: "Client 2"},
+		}
+		err := validateNoDuplicateClientIDs(clients)
+		require.NoError(t, err)
+	})
+
+	t.Run("DuplicateIDs", func(t *testing.T) {
+		clients := []storage.Client{
+			{ID: "client1", Name: "Client 1"},
+			{ID: "client1", Name: "Client 1 Duplicate"},
+		}
+		err := validateNoDuplicateClientIDs(clients)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "duplicate client ID")
+		require.Contains(t, err.Error(), "client1")
+		require.Contains(t, err.Error(), "staticClients")
+	})
+
+	t.Run("EmptyIDsIgnored", func(t *testing.T) {
+		clients := []storage.Client{
+			{ID: "", Name: "Client without ID"},
+			{ID: "client1", Name: "Client 1"},
+		}
+		err := validateNoDuplicateClientIDs(clients)
+		require.NoError(t, err)
+	})
+}
+
+func TestValidateNoDuplicateConnectorIDs(t *testing.T) {
+	t.Run("NoDuplicates", func(t *testing.T) {
+		connectors := []Connector{
+			{ID: "connector1", Name: "Connector 1", Type: "mock"},
+			{ID: "connector2", Name: "Connector 2", Type: "mock"},
+		}
+		err := validateNoDuplicateConnectorIDs(connectors)
+		require.NoError(t, err)
+	})
+
+	t.Run("DuplicateIDs", func(t *testing.T) {
+		connectors := []Connector{
+			{ID: "connector1", Name: "Connector 1", Type: "mock"},
+			{ID: "connector1", Name: "Connector 1 Duplicate", Type: "mock"},
+		}
+		err := validateNoDuplicateConnectorIDs(connectors)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "duplicate connector ID")
+		require.Contains(t, err.Error(), "connector1")
+		require.Contains(t, err.Error(), "connectors")
+	})
+
+	t.Run("EmptyIDsIgnored", func(t *testing.T) {
+		connectors := []Connector{
+			{ID: "", Name: "Connector without ID", Type: "mock"},
+			{ID: "connector1", Name: "Connector 1", Type: "mock"},
+		}
+		err := validateNoDuplicateConnectorIDs(connectors)
+		require.NoError(t, err)
 	})
 }

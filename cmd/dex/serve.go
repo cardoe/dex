@@ -212,6 +212,22 @@ func runServe(options serveOptions) error {
 
 	logger.Info("config storage", "storage_type", c.Storage.Type)
 
+	// Load clients from directory if specified
+	if c.StaticClientsDir != "" {
+		dirClients, err := loadClientsFromDir(c.StaticClientsDir, logger)
+		if err != nil {
+			return fmt.Errorf("failed to load clients from directory %q: %w (ensure directory exists and contains valid .yaml or .yml files)", c.StaticClientsDir, err)
+		}
+		// Merge directory clients with any StaticClients from config
+		// Directory clients are added first, then config clients
+		c.StaticClients = append(dirClients, c.StaticClients...)
+	}
+
+	// Validate no duplicate client IDs
+	if err := validateNoDuplicateClientIDs(c.StaticClients); err != nil {
+		return err
+	}
+
 	if len(c.StaticClients) > 0 {
 		for i, client := range c.StaticClients {
 			if client.Name == "" {
@@ -245,6 +261,22 @@ func runServe(options serveOptions) error {
 			passwords[i] = storage.Password(p)
 		}
 		s = storage.WithStaticPasswords(s, passwords, logger)
+	}
+
+	// Load connectors from directory if specified
+	if c.StaticConnectorsDir != "" {
+		dirConnectors, err := loadConnectorsFromDir(c.StaticConnectorsDir, logger)
+		if err != nil {
+			return fmt.Errorf("failed to load connectors from directory %q: %w (ensure directory exists and contains valid .yaml or .yml files)", c.StaticConnectorsDir, err)
+		}
+		// Merge directory connectors with any StaticConnectors from config
+		// Directory connectors are added first, then config connectors
+		c.StaticConnectors = append(dirConnectors, c.StaticConnectors...)
+	}
+
+	// Validate no duplicate connector IDs
+	if err := validateNoDuplicateConnectorIDs(c.StaticConnectors); err != nil {
+		return err
 	}
 
 	storageConnectors := make([]storage.Connector, len(c.StaticConnectors))
@@ -749,4 +781,189 @@ func loadTLSConfig(certFile, keyFile, caFile string, baseConfig *tls.Config) (*t
 // recordBuildInfo publishes information about Dex version and runtime info through an info metric (gauge).
 func recordBuildInfo() {
 	buildInfo.WithLabelValues(version, runtime.Version(), fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)).Set(1)
+}
+
+// loadClientsFromDir reads client configuration files from the specified directory.
+// Each file should be named <client-id>.yaml or <client-id>.yml and contain a client configuration.
+// The client ID will be derived from the filename. If a client has an ID field in the file,
+// it must match the filename or an error will be returned. Non-YAML files and subdirectories
+// are silently ignored. Returns nil if the directory doesn't exist (with a warning log).
+func loadClientsFromDir(dir string, logger *slog.Logger) ([]storage.Client, error) {
+	if dir == "" {
+		return nil, nil
+	}
+
+	// Check if directory exists
+	info, err := os.Stat(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			logger.Warn("static clients directory does not exist", "dir", dir)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to stat clients directory %s: %v", dir, err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("staticClientsDir is not a directory: %s", dir)
+	}
+
+	// Read directory contents
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read clients directory %s: %v", dir, err)
+	}
+
+	var clients []storage.Client
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		filename := entry.Name()
+		// Only process .yaml and .yml files
+		if !strings.HasSuffix(filename, ".yaml") && !strings.HasSuffix(filename, ".yml") {
+			continue
+		}
+
+		// Extract client ID from filename
+		clientID := strings.TrimSuffix(filename, filepath.Ext(filename))
+		if clientID == "" {
+			logger.Warn("skipping file with empty client ID", "file", filename)
+			continue
+		}
+
+		// Read and parse client file
+		filePath := filepath.Join(dir, filename)
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read client file %s: %v", filePath, err)
+		}
+
+		var client storage.Client
+		if err := yaml.Unmarshal(data, &client); err != nil {
+			return nil, fmt.Errorf("failed to parse client file %s: %v", filePath, err)
+		}
+
+		// If the client has an ID specified and it doesn't match the filename, that's an error
+		if client.ID != "" && client.ID != clientID {
+			return nil, fmt.Errorf("client ID mismatch in file %s: filename suggests %q but file contains %q", filename, clientID, client.ID)
+		}
+
+		// Set the client ID from the filename
+		client.ID = clientID
+
+		clients = append(clients, client)
+		logger.Info("loaded client from file", "client_id", clientID, "file", filename)
+	}
+
+	return clients, nil
+}
+
+// loadConnectorsFromDir reads connector configuration files from the specified directory.
+// Each file should be named <connector-id>.yaml or <connector-id>.yml and contain a connector configuration.
+// The connector ID will be derived from the filename. If a connector has an ID field in the file,
+// it must match the filename or an error will be returned. Non-YAML files and subdirectories
+// are silently ignored. Returns nil if the directory doesn't exist (with a warning log).
+func loadConnectorsFromDir(dir string, logger *slog.Logger) ([]Connector, error) {
+	if dir == "" {
+		return nil, nil
+	}
+
+	// Check if directory exists
+	info, err := os.Stat(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			logger.Warn("static connectors directory does not exist", "dir", dir)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to stat connectors directory %s: %v", dir, err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("staticConnectorsDir is not a directory: %s", dir)
+	}
+
+	// Read directory contents
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read connectors directory %s: %v", dir, err)
+	}
+
+	var connectors []Connector
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		filename := entry.Name()
+		// Only process .yaml and .yml files
+		if !strings.HasSuffix(filename, ".yaml") && !strings.HasSuffix(filename, ".yml") {
+			continue
+		}
+
+		// Extract connector ID from filename
+		connectorID := strings.TrimSuffix(filename, filepath.Ext(filename))
+		if connectorID == "" {
+			logger.Warn("skipping file with empty connector ID", "file", filename)
+			continue
+		}
+
+		// Read and parse connector file
+		filePath := filepath.Join(dir, filename)
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read connector file %s: %v", filePath, err)
+		}
+
+		var connector Connector
+		if err := yaml.Unmarshal(data, &connector); err != nil {
+			return nil, fmt.Errorf("failed to parse connector file %s: %v", filePath, err)
+		}
+
+		// If the connector has an ID specified and it doesn't match the filename, that's an error
+		if connector.ID != "" && connector.ID != connectorID {
+			return nil, fmt.Errorf("connector ID mismatch in file %s: filename suggests %q but file contains %q", filename, connectorID, connector.ID)
+		}
+
+		// Set the connector ID from the filename
+		connector.ID = connectorID
+
+		connectors = append(connectors, connector)
+		logger.Info("loaded connector from file", "connector_id", connectorID, "file", filename)
+	}
+
+	return connectors, nil
+}
+
+// validateNoDuplicateClientIDs checks for duplicate client IDs and returns an error if found.
+func validateNoDuplicateClientIDs(clients []storage.Client) error {
+	seen := make(map[string]bool)
+	for _, client := range clients {
+		// Use the ID after environment variable expansion if IDEnv is set
+		id := client.ID
+		if id == "" && client.IDEnv != "" {
+			id = os.Getenv(client.IDEnv)
+		}
+		if id == "" {
+			continue // Will be caught by later validation
+		}
+		if seen[id] {
+			return fmt.Errorf("duplicate client ID %q found in static clients configuration (check both staticClients in config and staticClientsDir files)", id)
+		}
+		seen[id] = true
+	}
+	return nil
+}
+
+// validateNoDuplicateConnectorIDs checks for duplicate connector IDs and returns an error if found.
+func validateNoDuplicateConnectorIDs(connectors []Connector) error {
+	seen := make(map[string]bool)
+	for _, connector := range connectors {
+		if connector.ID == "" {
+			continue // Will be caught by later validation
+		}
+		if seen[connector.ID] {
+			return fmt.Errorf("duplicate connector ID %q found in static connectors configuration (check both connectors in config and connectorsDir files)", connector.ID)
+		}
+		seen[connector.ID] = true
+	}
+	return nil
 }
