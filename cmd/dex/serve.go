@@ -216,6 +216,11 @@ func runServe(options serveOptions) error {
 		c.StaticClients = append(dirClients, c.StaticClients...)
 	}
 
+	// Validate no duplicate client IDs
+	if err := validateNoDuplicateClientIDs(c.StaticClients); err != nil {
+		return err
+	}
+
 	if len(c.StaticClients) > 0 {
 		for i, client := range c.StaticClients {
 			if client.Name == "" {
@@ -260,6 +265,11 @@ func runServe(options serveOptions) error {
 		// Merge directory connectors with any StaticConnectors from config
 		// Directory connectors are added first, then config connectors
 		c.StaticConnectors = append(dirConnectors, c.StaticConnectors...)
+	}
+
+	// Validate no duplicate connector IDs
+	if err := validateNoDuplicateConnectorIDs(c.StaticConnectors); err != nil {
+		return err
 	}
 
 	storageConnectors := make([]storage.Connector, len(c.StaticConnectors))
@@ -861,4 +871,39 @@ func loadConnectorsFromDir(dir string, logger *slog.Logger) ([]Connector, error)
 	}
 
 	return connectors, nil
+}
+
+// validateNoDuplicateClientIDs checks for duplicate client IDs and returns an error if found.
+func validateNoDuplicateClientIDs(clients []storage.Client) error {
+	seen := make(map[string]bool)
+	for _, client := range clients {
+		// Use the ID after environment variable expansion if IDEnv is set
+		id := client.ID
+		if id == "" && client.IDEnv != "" {
+			id = os.Getenv(client.IDEnv)
+		}
+		if id == "" {
+			continue // Will be caught by later validation
+		}
+		if seen[id] {
+			return fmt.Errorf("duplicate client ID %q found in static clients configuration", id)
+		}
+		seen[id] = true
+	}
+	return nil
+}
+
+// validateNoDuplicateConnectorIDs checks for duplicate connector IDs and returns an error if found.
+func validateNoDuplicateConnectorIDs(connectors []Connector) error {
+	seen := make(map[string]bool)
+	for _, connector := range connectors {
+		if connector.ID == "" {
+			continue // Will be caught by later validation
+		}
+		if seen[connector.ID] {
+			return fmt.Errorf("duplicate connector ID %q found in static connectors configuration", connector.ID)
+		}
+		seen[connector.ID] = true
+	}
+	return nil
 }

@@ -235,3 +235,65 @@ config:
 		require.Nil(t, connectors)
 	})
 }
+
+func TestValidateNoDuplicateClientIDs(t *testing.T) {
+	t.Run("NoDuplicates", func(t *testing.T) {
+		clients := []storage.Client{
+			{ID: "client1", Name: "Client 1"},
+			{ID: "client2", Name: "Client 2"},
+		}
+		err := validateNoDuplicateClientIDs(clients)
+		require.NoError(t, err)
+	})
+
+	t.Run("DuplicateIDs", func(t *testing.T) {
+		clients := []storage.Client{
+			{ID: "client1", Name: "Client 1"},
+			{ID: "client1", Name: "Client 1 Duplicate"},
+		}
+		err := validateNoDuplicateClientIDs(clients)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "duplicate client ID")
+		require.Contains(t, err.Error(), "client1")
+	})
+
+	t.Run("EmptyIDsIgnored", func(t *testing.T) {
+		clients := []storage.Client{
+			{ID: "", Name: "Client without ID"},
+			{ID: "client1", Name: "Client 1"},
+		}
+		err := validateNoDuplicateClientIDs(clients)
+		require.NoError(t, err)
+	})
+}
+
+func TestValidateNoDuplicateConnectorIDs(t *testing.T) {
+	t.Run("NoDuplicates", func(t *testing.T) {
+		connectors := []Connector{
+			{ID: "connector1", Name: "Connector 1", Type: "mock"},
+			{ID: "connector2", Name: "Connector 2", Type: "mock"},
+		}
+		err := validateNoDuplicateConnectorIDs(connectors)
+		require.NoError(t, err)
+	})
+
+	t.Run("DuplicateIDs", func(t *testing.T) {
+		connectors := []Connector{
+			{ID: "connector1", Name: "Connector 1", Type: "mock"},
+			{ID: "connector1", Name: "Connector 1 Duplicate", Type: "mock"},
+		}
+		err := validateNoDuplicateConnectorIDs(connectors)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "duplicate connector ID")
+		require.Contains(t, err.Error(), "connector1")
+	})
+
+	t.Run("EmptyIDsIgnored", func(t *testing.T) {
+		connectors := []Connector{
+			{ID: "", Name: "Connector without ID", Type: "mock"},
+			{ID: "connector1", Name: "Connector 1", Type: "mock"},
+		}
+		err := validateNoDuplicateConnectorIDs(connectors)
+		require.NoError(t, err)
+	})
+}
