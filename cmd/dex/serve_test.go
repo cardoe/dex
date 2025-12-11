@@ -255,6 +255,7 @@ func TestValidateNoDuplicateClientIDs(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "duplicate client ID")
 		require.Contains(t, err.Error(), "client1")
+		require.Contains(t, err.Error(), "staticClients")
 	})
 
 	t.Run("EmptyIDsIgnored", func(t *testing.T) {
@@ -286,6 +287,7 @@ func TestValidateNoDuplicateConnectorIDs(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "duplicate connector ID")
 		require.Contains(t, err.Error(), "connector1")
+		require.Contains(t, err.Error(), "connectors")
 	})
 
 	t.Run("EmptyIDsIgnored", func(t *testing.T) {

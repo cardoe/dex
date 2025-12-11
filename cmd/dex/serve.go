@@ -209,7 +209,7 @@ func runServe(options serveOptions) error {
 	if c.StaticClientsDir != "" {
 		dirClients, err := loadClientsFromDir(c.StaticClientsDir, logger)
 		if err != nil {
-			return fmt.Errorf("failed to load clients from directory: %v", err)
+			return fmt.Errorf("failed to load clients from directory %q: %w (ensure directory exists and contains valid .yaml or .yml files)", c.StaticClientsDir, err)
 		}
 		// Merge directory clients with any StaticClients from config
 		// Directory clients are added first, then config clients
@@ -260,7 +260,7 @@ func runServe(options serveOptions) error {
 	if c.StaticConnectorsDir != "" {
 		dirConnectors, err := loadConnectorsFromDir(c.StaticConnectorsDir, logger)
 		if err != nil {
-			return fmt.Errorf("failed to load connectors from directory: %v", err)
+			return fmt.Errorf("failed to load connectors from directory %q: %w (ensure directory exists and contains valid .yaml or .yml files)", c.StaticConnectorsDir, err)
 		}
 		// Merge directory connectors with any StaticConnectors from config
 		// Directory connectors are added first, then config connectors
@@ -886,7 +886,7 @@ func validateNoDuplicateClientIDs(clients []storage.Client) error {
 			continue // Will be caught by later validation
 		}
 		if seen[id] {
-			return fmt.Errorf("duplicate client ID %q found in static clients configuration", id)
+			return fmt.Errorf("duplicate client ID %q found in static clients configuration (check both staticClients in config and staticClientsDir files)", id)
 		}
 		seen[id] = true
 	}
@@ -901,7 +901,7 @@ func validateNoDuplicateConnectorIDs(connectors []Connector) error {
 			continue // Will be caught by later validation
 		}
 		if seen[connector.ID] {
-			return fmt.Errorf("duplicate connector ID %q found in static connectors configuration", connector.ID)
+			return fmt.Errorf("duplicate connector ID %q found in static connectors configuration (check both connectors in config and connectorsDir files)", connector.ID)
 		}
 		seen[connector.ID] = true
 	}
