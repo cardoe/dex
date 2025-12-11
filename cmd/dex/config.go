@@ -43,6 +43,11 @@ type Config struct {
 	// querying the storage. Write operations, like creating a client, will fail.
 	StaticClients []storage.Client `json:"staticClients"`
 
+	// StaticClientsDir is a directory path containing client configuration files.
+	// Each file should be named <client-id>.yaml and contain a client configuration.
+	// The client ID will be derived from the filename.
+	StaticClientsDir string `json:"staticClientsDir"`
+
 	// If enabled, the server will maintain a list of passwords which can be used
 	// to identify a user.
 	EnablePasswordDB bool `json:"enablePasswordDB"`

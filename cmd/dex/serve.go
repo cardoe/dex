@@ -205,6 +205,17 @@ func runServe(options serveOptions) error {
 
 	logger.Info("config storage", "storage_type", c.Storage.Type)
 
+	// Load clients from directory if specified
+	if c.StaticClientsDir != "" {
+		dirClients, err := loadClientsFromDir(c.StaticClientsDir, logger)
+		if err != nil {
+			return fmt.Errorf("failed to load clients from directory: %v", err)
+		}
+		// Merge directory clients with any StaticClients from config
+		// Directory clients are added first, then config clients
+		c.StaticClients = append(dirClients, c.StaticClients...)
+	}
+
 	if len(c.StaticClients) > 0 {
 		for i, client := range c.StaticClients {
 			if client.Name == "" {
@@ -693,4 +704,77 @@ func loadTLSConfig(certFile, keyFile, caFile string, baseConfig *tls.Config) (*t
 // recordBuildInfo publishes information about Dex version and runtime info through an info metric (gauge).
 func recordBuildInfo() {
 	buildInfo.WithLabelValues(version, runtime.Version(), fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)).Set(1)
+}
+
+// loadClientsFromDir reads client configuration files from the specified directory.
+// Each file should be named <client-id>.yaml or <client-id>.yml and contain a client configuration.
+// The client ID will be derived from the filename if not present in the file.
+func loadClientsFromDir(dir string, logger *slog.Logger) ([]storage.Client, error) {
+	if dir == "" {
+		return nil, nil
+	}
+
+	// Check if directory exists
+	info, err := os.Stat(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			logger.Warn("static clients directory does not exist", "dir", dir)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to stat clients directory %s: %v", dir, err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("staticClientsDir is not a directory: %s", dir)
+	}
+
+	// Read directory contents
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read clients directory %s: %v", dir, err)
+	}
+
+	var clients []storage.Client
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		filename := entry.Name()
+		// Only process .yaml and .yml files
+		if !strings.HasSuffix(filename, ".yaml") && !strings.HasSuffix(filename, ".yml") {
+			continue
+		}
+
+		// Extract client ID from filename
+		clientID := strings.TrimSuffix(filename, filepath.Ext(filename))
+		if clientID == "" {
+			logger.Warn("skipping file with empty client ID", "file", filename)
+			continue
+		}
+
+		// Read and parse client file
+		filePath := filepath.Join(dir, filename)
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read client file %s: %v", filePath, err)
+		}
+
+		var client storage.Client
+		if err := yaml.Unmarshal(data, &client); err != nil {
+			return nil, fmt.Errorf("failed to parse client file %s: %v", filePath, err)
+		}
+
+		// If the client has an ID specified and it doesn't match the filename, that's an error
+		if client.ID != "" && client.ID != clientID {
+			return nil, fmt.Errorf("client ID mismatch in file %s: filename suggests %q but file contains %q", filename, clientID, client.ID)
+		}
+
+		// Set the client ID from the filename
+		client.ID = clientID
+
+		clients = append(clients, client)
+		logger.Info("loaded client from file", "client_id", clientID, "file", filename)
+	}
+
+	return clients, nil
 }
