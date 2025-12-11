@@ -251,6 +251,17 @@ func runServe(options serveOptions) error {
 		s = storage.WithStaticPasswords(s, passwords, logger)
 	}
 
+	// Load connectors from directory if specified
+	if c.StaticConnectorsDir != "" {
+		dirConnectors, err := loadConnectorsFromDir(c.StaticConnectorsDir, logger)
+		if err != nil {
+			return fmt.Errorf("failed to load connectors from directory: %v", err)
+		}
+		// Merge directory connectors with any StaticConnectors from config
+		// Directory connectors are added first, then config connectors
+		c.StaticConnectors = append(dirConnectors, c.StaticConnectors...)
+	}
+
 	storageConnectors := make([]storage.Connector, len(c.StaticConnectors))
 	for i, c := range c.StaticConnectors {
 		if c.ID == "" || c.Name == "" || c.Type == "" {
@@ -777,4 +788,77 @@ func loadClientsFromDir(dir string, logger *slog.Logger) ([]storage.Client, erro
 	}
 
 	return clients, nil
+}
+
+// loadConnectorsFromDir reads connector configuration files from the specified directory.
+// Each file should be named <connector-id>.yaml or <connector-id>.yml and contain a connector configuration.
+// The connector ID will be derived from the filename if not present in the file.
+func loadConnectorsFromDir(dir string, logger *slog.Logger) ([]Connector, error) {
+	if dir == "" {
+		return nil, nil
+	}
+
+	// Check if directory exists
+	info, err := os.Stat(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			logger.Warn("static connectors directory does not exist", "dir", dir)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to stat connectors directory %s: %v", dir, err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("staticConnectorsDir is not a directory: %s", dir)
+	}
+
+	// Read directory contents
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read connectors directory %s: %v", dir, err)
+	}
+
+	var connectors []Connector
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		filename := entry.Name()
+		// Only process .yaml and .yml files
+		if !strings.HasSuffix(filename, ".yaml") && !strings.HasSuffix(filename, ".yml") {
+			continue
+		}
+
+		// Extract connector ID from filename
+		connectorID := strings.TrimSuffix(filename, filepath.Ext(filename))
+		if connectorID == "" {
+			logger.Warn("skipping file with empty connector ID", "file", filename)
+			continue
+		}
+
+		// Read and parse connector file
+		filePath := filepath.Join(dir, filename)
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read connector file %s: %v", filePath, err)
+		}
+
+		var connector Connector
+		if err := yaml.Unmarshal(data, &connector); err != nil {
+			return nil, fmt.Errorf("failed to parse connector file %s: %v", filePath, err)
+		}
+
+		// If the connector has an ID specified and it doesn't match the filename, that's an error
+		if connector.ID != "" && connector.ID != connectorID {
+			return nil, fmt.Errorf("connector ID mismatch in file %s: filename suggests %q but file contains %q", filename, connectorID, connector.ID)
+		}
+
+		// Set the connector ID from the filename
+		connector.ID = connectorID
+
+		connectors = append(connectors, connector)
+		logger.Info("loaded connector from file", "connector_id", connectorID, "file", filename)
+	}
+
+	return connectors, nil
 }

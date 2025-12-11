@@ -39,6 +39,11 @@ type Config struct {
 	// Write operations, like updating a connector, will fail.
 	StaticConnectors []Connector `json:"connectors"`
 
+	// StaticConnectorsDir is a directory path containing connector configuration files.
+	// Each file should be named <connector-id>.yaml and contain a connector configuration.
+	// The connector ID will be derived from the filename.
+	StaticConnectorsDir string `json:"connectorsDir"`
+
 	// StaticClients cause the server to use this list of clients rather than
 	// querying the storage. Write operations, like creating a client, will fail.
 	StaticClients []storage.Client `json:"staticClients"`

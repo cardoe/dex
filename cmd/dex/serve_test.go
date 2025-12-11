@@ -133,3 +133,105 @@ secret: "test-secret"`
 		require.Nil(t, clients)
 	})
 }
+
+func TestLoadConnectorsFromDir(t *testing.T) {
+	logger, err := newLogger(slog.LevelInfo, "text")
+	require.NoError(t, err)
+
+	t.Run("EmptyDir", func(t *testing.T) {
+		connectors, err := loadConnectorsFromDir("", logger)
+		require.NoError(t, err)
+		require.Nil(t, connectors)
+	})
+
+	t.Run("NonExistentDir", func(t *testing.T) {
+		connectors, err := loadConnectorsFromDir("/nonexistent/path", logger)
+		require.NoError(t, err)
+		require.Nil(t, connectors)
+	})
+
+	t.Run("ValidConnectorsDir", func(t *testing.T) {
+		// Create temporary directory
+		tmpDir := t.TempDir()
+
+		// Create test connector files
+		connector1 := `type: "mockCallback"
+name: "Test Connector 1"
+config:
+  issuer: "https://example.com"`
+
+		connector2 := `type: "mockCallback"
+name: "Test Connector 2"
+config:
+  issuer: "https://example2.com"`
+
+		err := os.WriteFile(filepath.Join(tmpDir, "connector1.yaml"), []byte(connector1), 0644)
+		require.NoError(t, err)
+
+		err = os.WriteFile(filepath.Join(tmpDir, "connector2.yml"), []byte(connector2), 0644)
+		require.NoError(t, err)
+
+		// Create a non-yaml file that should be ignored
+		err = os.WriteFile(filepath.Join(tmpDir, "README.txt"), []byte("ignore me"), 0644)
+		require.NoError(t, err)
+
+		// Load connectors
+		connectors, err := loadConnectorsFromDir(tmpDir, logger)
+		require.NoError(t, err)
+		require.Len(t, connectors, 2)
+
+		// Verify connector1
+		require.Equal(t, "connector1", connectors[0].ID)
+		require.Equal(t, "Test Connector 1", connectors[0].Name)
+		require.Equal(t, "mockCallback", connectors[0].Type)
+
+		// Verify connector2
+		require.Equal(t, "connector2", connectors[1].ID)
+		require.Equal(t, "Test Connector 2", connectors[1].Name)
+		require.Equal(t, "mockCallback", connectors[1].Type)
+	})
+
+	t.Run("ConnectorIDMismatch", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create connector with mismatched ID
+		connectorWithID := `id: "different-id"
+type: "mockCallback"
+name: "Test Connector"
+config:
+  issuer: "https://example.com"`
+
+		err := os.WriteFile(filepath.Join(tmpDir, "connector1.yaml"), []byte(connectorWithID), 0644)
+		require.NoError(t, err)
+
+		// This should fail because the ID in the file doesn't match the filename
+		connectors, err := loadConnectorsFromDir(tmpDir, logger)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "connector ID mismatch")
+		require.Nil(t, connectors)
+	})
+
+	t.Run("InvalidYAML", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create invalid YAML file
+		err := os.WriteFile(filepath.Join(tmpDir, "invalid.yaml"), []byte("invalid: [yaml"), 0644)
+		require.NoError(t, err)
+
+		connectors, err := loadConnectorsFromDir(tmpDir, logger)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to parse")
+		require.Nil(t, connectors)
+	})
+
+	t.Run("NotADirectory", func(t *testing.T) {
+		tmpFile := filepath.Join(t.TempDir(), "notadir")
+		err := os.WriteFile(tmpFile, []byte("test"), 0644)
+		require.NoError(t, err)
+
+		connectors, err := loadConnectorsFromDir(tmpFile, logger)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "not a directory")
+		require.Nil(t, connectors)
+	})
+}
