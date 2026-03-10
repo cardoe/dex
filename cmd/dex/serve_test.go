@@ -89,10 +89,11 @@ public: true`
 		require.True(t, clients[1].Public)
 	})
 
-	t.Run("ClientIDMismatch", func(t *testing.T) {
+	t.Run("IDFieldIgnored", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
-		// Create client with mismatched ID
+		// Create client with ID field that differs from filename
+		// The ID field should be ignored and filename used instead
 		clientWithID := `id: "different-id"
 name: "Test Client"
 redirectURIs:
@@ -102,11 +103,11 @@ secret: "test-secret"`
 		err := os.WriteFile(filepath.Join(tmpDir, "client1.yaml"), []byte(clientWithID), 0644)
 		require.NoError(t, err)
 
-		// This should fail because the ID in the file doesn't match the filename
+		// The ID field in the file should be ignored, filename is used
 		clients, err := loadClientsFromDir(tmpDir, logger)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "client ID mismatch")
-		require.Nil(t, clients)
+		require.NoError(t, err)
+		require.Len(t, clients, 1)
+		require.Equal(t, "client1", clients[0].ID) // ID from filename, not from file
 	})
 
 	t.Run("InvalidYAML", func(t *testing.T) {
@@ -191,10 +192,11 @@ config:
 		require.Equal(t, "mockCallback", connectors[1].Type)
 	})
 
-	t.Run("ConnectorIDMismatch", func(t *testing.T) {
+	t.Run("IDFieldIgnored", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
-		// Create connector with mismatched ID
+		// Create connector with ID field that differs from filename
+		// The ID field should be ignored and filename used instead
 		connectorWithID := `id: "different-id"
 type: "mockCallback"
 name: "Test Connector"
@@ -204,11 +206,11 @@ config:
 		err := os.WriteFile(filepath.Join(tmpDir, "connector1.yaml"), []byte(connectorWithID), 0644)
 		require.NoError(t, err)
 
-		// This should fail because the ID in the file doesn't match the filename
+		// The ID field in the file should be ignored, filename is used
 		connectors, err := loadConnectorsFromDir(tmpDir, logger)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "connector ID mismatch")
-		require.Nil(t, connectors)
+		require.NoError(t, err)
+		require.Len(t, connectors, 1)
+		require.Equal(t, "connector1", connectors[0].ID) // ID from filename, not from file
 	})
 
 	t.Run("InvalidYAML", func(t *testing.T) {

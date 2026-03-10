@@ -1,5 +1,5 @@
 # Example GitHub connector configuration
-# The connector ID is derived from the filename: "github"
+# The connector ID is always taken from the filename: "github"
 
 type: "github"
 name: "GitHub"

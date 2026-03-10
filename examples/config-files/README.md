@@ -87,8 +87,9 @@ See the `connectors/` directory for more examples.
 
 ## Important Notes
 
-1. **Client/Connector ID**: The ID is taken from the filename (without the `.yaml` or `.yml` extension)
-   - If an `id` field is present in the file, it must match the filename
+1. **Client/Connector ID**: The ID is always taken from the filename (without the `.yaml` or `.yml` extension)
+   - Any `id` field in the file itself is ignored
+   - The filename is the single source of truth for the ID
    - Example: `my-app.yaml` will have ID `my-app`
 
 2. **File Extensions**: Both `.yaml` and `.yml` extensions are supported

@@ -785,9 +785,9 @@ func recordBuildInfo() {
 
 // loadClientsFromDir reads client configuration files from the specified directory.
 // Each file should be named <client-id>.yaml or <client-id>.yml and contain a client configuration.
-// The client ID will be derived from the filename. If a client has an ID field in the file,
-// it must match the filename or an error will be returned. Non-YAML files and subdirectories
-// are silently ignored. Returns nil if the directory doesn't exist (with a warning log).
+// The client ID is always derived from the filename. Any 'id' field in the file is ignored.
+// Non-YAML files and subdirectories are silently ignored.
+// Returns nil if the directory doesn't exist (with a warning log).
 func loadClientsFromDir(dir string, logger *slog.Logger) ([]storage.Client, error) {
 	entries, err := validateConfigDir(dir, "clients", logger)
 	if err != nil {
@@ -826,12 +826,7 @@ func loadClientsFromDir(dir string, logger *slog.Logger) ([]storage.Client, erro
 			return nil, fmt.Errorf("failed to parse client file %s: %v", filePath, err)
 		}
 
-		// If the client has an ID specified and it doesn't match the filename, that's an error
-		if client.ID != "" && client.ID != clientID {
-			return nil, fmt.Errorf("client ID mismatch in file %s: filename suggests %q but file contains %q", filename, clientID, client.ID)
-		}
-
-		// Set the client ID from the filename
+		// Always set the client ID from the filename (ignore any id field in the file)
 		client.ID = clientID
 
 		clients = append(clients, client)
@@ -843,9 +838,9 @@ func loadClientsFromDir(dir string, logger *slog.Logger) ([]storage.Client, erro
 
 // loadConnectorsFromDir reads connector configuration files from the specified directory.
 // Each file should be named <connector-id>.yaml or <connector-id>.yml and contain a connector configuration.
-// The connector ID will be derived from the filename. If a connector has an ID field in the file,
-// it must match the filename or an error will be returned. Non-YAML files and subdirectories
-// are silently ignored. Returns nil if the directory doesn't exist (with a warning log).
+// The connector ID is always derived from the filename. Any 'id' field in the file is ignored.
+// Non-YAML files and subdirectories are silently ignored.
+// Returns nil if the directory doesn't exist (with a warning log).
 func loadConnectorsFromDir(dir string, logger *slog.Logger) ([]Connector, error) {
 	entries, err := validateConfigDir(dir, "connectors", logger)
 	if err != nil {
@@ -884,12 +879,7 @@ func loadConnectorsFromDir(dir string, logger *slog.Logger) ([]Connector, error)
 			return nil, fmt.Errorf("failed to parse connector file %s: %v", filePath, err)
 		}
 
-		// If the connector has an ID specified and it doesn't match the filename, that's an error
-		if connector.ID != "" && connector.ID != connectorID {
-			return nil, fmt.Errorf("connector ID mismatch in file %s: filename suggests %q but file contains %q", filename, connectorID, connector.ID)
-		}
-
-		// Set the connector ID from the filename
+		// Always set the connector ID from the filename (ignore any id field in the file)
 		connector.ID = connectorID
 
 		connectors = append(connectors, connector)

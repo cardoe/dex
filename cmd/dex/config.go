@@ -55,9 +55,10 @@ type Config struct {
 
 	// StaticConnectorsDir is a directory path containing connector configuration files.
 	// Each file should be named <connector-id>.yaml or <connector-id>.yml and contain
-	// a connector configuration. The connector ID will be derived from the filename.
-	// Directory-loaded connectors are merged with StaticConnectors from the main config,
-	// with directory files loaded first. IDs must be unique across both sources.
+	// a connector configuration. The connector ID is always taken from the filename.
+	// Any 'id' field in the file is ignored. Directory-loaded connectors are merged
+	// with StaticConnectors from the main config, with directory files loaded first.
+	// IDs must be unique across both sources.
 	StaticConnectorsDir string `json:"connectorsDir"`
 
 	// StaticClients cause the server to use this list of clients rather than
@@ -66,9 +67,10 @@ type Config struct {
 
 	// StaticClientsDir is a directory path containing client configuration files.
 	// Each file should be named <client-id>.yaml or <client-id>.yml and contain
-	// a client configuration. The client ID will be derived from the filename.
-	// Directory-loaded clients are merged with StaticClients from the main config,
-	// with directory files loaded first. IDs must be unique across both sources.
+	// a client configuration. The client ID is always taken from the filename.
+	// Any 'id' field in the file is ignored. Directory-loaded clients are merged
+	// with StaticClients from the main config, with directory files loaded first.
+	// IDs must be unique across both sources.
 	StaticClientsDir string `json:"staticClientsDir"`
 
 	// If enabled, the server will maintain a list of passwords which can be used

@@ -1,6 +1,6 @@
 # Example LDAP connector configuration
-# The connector ID is derived from the filename: "ldap"
-# Do not include an "id" field unless it matches the filename
+# The connector ID is always taken from the filename: "ldap"
+# Any "id" field in this file is ignored
 
 type: "ldap"
 name: "LDAP"

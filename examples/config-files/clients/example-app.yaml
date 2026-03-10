@@ -1,6 +1,6 @@
 # Example OAuth2 client configuration for a web application
-# The client ID is derived from the filename: "example-app"
-# Do not include an "id" field unless it matches the filename
+# The client ID is always taken from the filename: "example-app"
+# Any "id" field in this file is ignored
 
 name: "Example Application"
 
