@@ -124,6 +124,39 @@ func TestRegisterRequiresInitialAccessToken(t *testing.T) {
 	}
 }
 
+func TestRegisterLogsRejections(t *testing.T) {
+	var logs bytes.Buffer
+	h := testHandler()
+	h.Logger = slog.New(slog.NewTextHandler(&logs, nil))
+
+	rr := registrationRequest(t, h, http.MethodPost, "Bearer initial-access-token", Request{
+		RedirectURIs: []string{"http://client.example.com/callback"},
+		ClientName:   "client",
+	})
+	require.Equal(t, http.StatusBadRequest, rr.Code)
+	require.Contains(t, logs.String(), "level=WARN")
+	require.Contains(t, logs.String(), `msg="rejected dynamic client registration"`)
+	require.Contains(t, logs.String(), "error=invalid_redirect_uri")
+	require.Contains(t, logs.String(), "http://client.example.com/callback")
+	require.Contains(t, logs.String(), "client_name=client")
+
+	for auth, want := range map[string]string{
+		"":                                   "missing",
+		"initial-access-token":               `"no scheme"`,
+		"Basic initial-access-token":         `"non-bearer scheme"`,
+		"Bearer bearer initial-access-token": `"bearer token contains whitespace"`,
+		"Bearer wrong":                       `"bearer token mismatch"`,
+	} {
+		logs.Reset()
+		rr := registrationRequest(t, h, http.MethodPost, auth, Request{
+			RedirectURIs: []string{"https://client.example.com/callback"},
+		})
+		require.Equal(t, http.StatusUnauthorized, rr.Code)
+		require.Contains(t, logs.String(), "authorization="+want, auth)
+		require.NotContains(t, logs.String(), "initial-access-token", auth)
+	}
+}
+
 func TestRegisterRejectsInvalidMetadata(t *testing.T) {
 	tests := []struct {
 		name      string

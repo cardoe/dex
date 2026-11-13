@@ -85,18 +85,20 @@ func (h *Handler) handle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Pragma", "no-cache")
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
-		h.writeError(w, oauth2.InvalidRequest, "method must be POST", http.StatusMethodNotAllowed)
+		h.reject(w, r, oauth2.InvalidRequest, "method must be POST", http.StatusMethodNotAllowed)
 		return
 	}
 	if !h.authenticated(r.Header.Get("Authorization")) {
 		w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
-		h.writeError(w, errorInvalidToken, "invalid initial access token", http.StatusUnauthorized)
+		h.reject(w, r, errorInvalidToken, "invalid initial access token", http.StatusUnauthorized,
+			"authorization", describeAuthorization(r.Header.Get("Authorization")))
 		return
 	}
 
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" {
-		h.writeError(w, oauth2.InvalidRequest, "content type must be application/json", http.StatusUnsupportedMediaType)
+		h.reject(w, r, oauth2.InvalidRequest, "content type must be application/json", http.StatusUnsupportedMediaType,
+			"content_type", r.Header.Get("Content-Type"))
 		return
 	}
 
@@ -106,19 +108,28 @@ func (h *Handler) handle(w http.ResponseWriter, r *http.Request) {
 	if err := decoder.Decode(&req); err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			h.writeError(w, oauth2.InvalidRequest, "request body is too large", http.StatusRequestEntityTooLarge)
+			h.reject(w, r, oauth2.InvalidRequest, "request body is too large", http.StatusRequestEntityTooLarge)
 			return
 		}
-		h.writeError(w, oauth2.InvalidRequest, "invalid JSON request body", http.StatusBadRequest)
+		h.reject(w, r, oauth2.InvalidRequest, "invalid JSON request body", http.StatusBadRequest, "err", err)
 		return
 	}
 	if err := rejectTrailingJSON(decoder); err != nil {
-		h.writeError(w, oauth2.InvalidRequest, "request body must contain one JSON object", http.StatusBadRequest)
+		h.reject(w, r, oauth2.InvalidRequest, "request body must contain one JSON object", http.StatusBadRequest)
 		return
 	}
 
 	if typ, description := h.normalizeAndValidate(&req); typ != "" {
-		h.writeError(w, typ, description, http.StatusBadRequest)
+		// Client metadata is not secret, and without it a rejected client
+		// has no way to learn which field was refused beyond the response.
+		h.reject(w, r, typ, description, http.StatusBadRequest,
+			"client_name", req.ClientName,
+			"redirect_uris", req.RedirectURIs,
+			"token_endpoint_auth_method", req.TokenEndpointAuthMethod,
+			"grant_types", req.GrantTypes,
+			"response_types", req.ResponseTypes,
+			"scopes", strings.Fields(req.Scope),
+		)
 		return
 	}
 
@@ -191,6 +202,46 @@ func (h *Handler) handle(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) initialAccessTokenID() string {
 	digest := sha256.Sum256([]byte(h.InitialAccessToken))
 	return fmt.Sprintf("sha256:%x", digest[:8])
+}
+
+// reject logs a refused registration request and writes the OAuth2 error.
+// attrs must never include the initial access token.
+func (h *Handler) reject(w http.ResponseWriter, r *http.Request, typ, description string, status int, attrs ...any) {
+	attrs = append([]any{
+		"error", typ,
+		"error_description", description,
+		"status", status,
+		"remote_addr", r.RemoteAddr,
+		"user_agent", r.UserAgent(),
+	}, attrs...)
+	h.Logger.WarnContext(r.Context(), "rejected dynamic client registration", attrs...)
+	h.writeError(w, typ, description, status)
+}
+
+// describeAuthorization summarises an Authorization header without revealing
+// the credential, so that a rejected token can be told apart from a missing
+// or malformed header.
+func describeAuthorization(header string) string {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return "missing"
+	}
+	scheme, credential, ok := strings.Cut(header, " ")
+	if !ok {
+		return "no scheme"
+	}
+	if !strings.EqualFold(scheme, "Bearer") {
+		return "non-bearer scheme"
+	}
+	credential = strings.TrimSpace(credential)
+	switch {
+	case credential == "":
+		return "empty bearer token"
+	case strings.ContainsAny(credential, " \t"):
+		return "bearer token contains whitespace"
+	default:
+		return "bearer token mismatch"
+	}
 }
 
 func (h *Handler) authenticated(header string) bool {
